@@ -10,7 +10,6 @@ from checks import State, checks, run_checks
 from helpers import header, sh, step
 from report import print_report
 
-
 DISCLAIMER = """
 This script is provided as a convenience to automate some steps
 of verifying a release candidate. It does not take over the responsibilities
@@ -22,9 +21,7 @@ USER_AGENT = "gh:openzipkin-contrib/apache-release-verification"
 @click.command()
 @click.argument("module")
 @click.argument("version")
-@click.option(
-    "--gpg-key", required=True, help="ID of GPG key used to sign the release"
-)
+@click.option("--gpg-key", required=True, help="ID of GPG key used to sign the release")
 @click.option(
     "--git-hash", required=True, help="Git hash of the commit the release is built from"
 )
@@ -72,7 +69,7 @@ def main(
         work_dir=workdir,
         incubating=incubating,
         gpg_key=gpg_key,
-        git_hash=git_hash
+        git_hash=git_hash,
     )
 
     # TODO filter checks here with optional arguments later

@@ -1,9 +1,9 @@
 import os
 from typing import Callable, List, Optional, Union
 
+import apache_2_license
 from helpers import format_check_name, sh, step
 from report import Report, Result
-import apache_2_license
 
 
 class State:
@@ -15,7 +15,7 @@ class State:
         work_dir: str,
         incubating: bool,
         gpg_key: str,
-        git_hash: str
+        git_hash: str,
     ):
         self.project = project
         self.module = module
@@ -91,7 +91,9 @@ def run_checks(state: State, checks: List[Callable[[State], Optional[str]]]) -> 
     return Report(results)
 
 
-def _check_sh(cmds: Union[str, List[str]], workdir: Optional[str] = None) -> Optional[str]:
+def _check_sh(
+    cmds: Union[str, List[str]], workdir: Optional[str] = None
+) -> Optional[str]:
     if isinstance(cmds, str):
         cmds = [cmds]
     for cmd in cmds:
@@ -135,16 +137,22 @@ def check_gpg_key_in_keys_file(state: State) -> Optional[str]:
 
 
 def check_gpg_signature(state: State) -> Optional[str]:
-    return _check_sh([
-        f"gpg --no-default-keyring --keyring {state.keyring_path} --import {state.keys_path}",
-        f"gpgv --keyring {state.keyring_path} {state.asc_path} {state.zip_path}"
-    ])
+    return _check_sh(
+        [
+            (
+                f"gpg --no-default-keyring --keyring {state.keyring_path} "
+                f"--import {state.keys_path}"
+            ),
+            (
+                f"gpgv --keyring {state.keyring_path} "
+                f"{state.asc_path} {state.zip_path}"
+            ),
+        ]
+    )
 
 
 def check_unzip(state: State) -> Optional[str]:
-    return _check_sh(
-        f"unzip -q -d {state.unzipped_dir} {state.zip_path}"
-    )
+    return _check_sh(f"unzip -q -d {state.unzipped_dir} {state.zip_path}")
 
 
 def check_base_dir_in_zip(state: State) -> Optional[str]:
@@ -152,30 +160,39 @@ def check_base_dir_in_zip(state: State) -> Optional[str]:
 
 
 def check_git_revision(state: State) -> Optional[str]:
-    return _check_sh([
-        f"git clone https://github.com/apache/{state.git_repo_name} {state.git_dir}",
-        f"git --work-tree {state.git_dir} --git-dir {state.git_dir}/.git checkout --quiet {state.git_hash}",
-        f"diff --recursive {state.git_dir} {state.source_dir} --exclude DEPENDENCIES --exclude NOTICE --exclude .git --exclude .gitignore"
-    ])
+    return _check_sh(
+        [
+            (
+                f"git clone https://github.com/apache/{state.git_repo_name} "
+                f"{state.git_dir}"
+            ),
+            (
+                f"git --work-tree {state.git_dir} "
+                f"--git-dir {state.git_dir}/.git "
+                f"checkout --quiet {state.git_hash}"
+            ),
+            (
+                f"diff --recursive {state.git_dir} {state.source_dir} "
+                "--exclude DEPENDENCIES --exclude NOTICE --exclude .git "
+                "--exclude .gitignore"
+            ),
+        ]
+    )
 
 
 def _check_file_looks_good(path: str) -> Optional[str]:
-    return _check_sh([
-        f"less {path}",
-        f"read -r -p 'Did the contents of {path} look good to you? [y/N] ' response; test \"$response\" == y"
-    ])
+    prompt = f"Did the contents of {path} look good to you? [y/N] "
+    return _check_sh(
+        [f"less {path}", f"read -r -p '{prompt}' response; test \"$response\" == y"]
+    )
 
 
 def check_disclaimer_looks_good(state: State) -> Optional[str]:
-    return _check_file_looks_good(
-        os.path.join(state.source_dir, 'DISCLAIMER')
-    )
+    return _check_file_looks_good(os.path.join(state.source_dir, "DISCLAIMER"))
 
 
 def check_notice_looks_good(state: State) -> Optional[str]:
-    return _check_file_looks_good(
-        os.path.join(state.source_dir, 'NOTICE')
-    )
+    return _check_file_looks_good(os.path.join(state.source_dir, "NOTICE"))
 
 
 def check_license_is_apache_2(state: State) -> Optional[str]:
@@ -187,14 +204,13 @@ def check_license_is_apache_2(state: State) -> Optional[str]:
 
 
 def check_license_looks_good(state: State) -> Optional[str]:
-    return _check_file_looks_good(
-        os.path.join(state.source_dir, 'LICENSE')
-    )
+    return _check_file_looks_good(os.path.join(state.source_dir, "LICENSE"))
 
 
 def check_no_binary_files(state: State) -> Optional[str]:
     return _check_sh(
-        f"diff <(echo -n) <(find {state.source_dir} -type f | xargs file | grep -v text | cut -f1 -d:)"
+        f"diff <(echo -n) <(find {state.source_dir} -type f "
+        "| xargs file | grep -v text | cut -f1 -d:)"
     )
 
 
@@ -218,5 +234,5 @@ checks = [
     check_license_is_apache_2,
     check_license_looks_good,
     check_no_binary_files,
-    check_build_and_test
+    check_build_and_test,
 ]
