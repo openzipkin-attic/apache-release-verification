@@ -8,15 +8,16 @@ from helpers import header
 
 class Result(NamedTuple):
     name: str
+    hide_if_passing: bool
     error: Optional[str]
 
     @staticmethod
-    def passed(name: str) -> "Result":
-        return Result(name, None)
+    def passed(name: str, hide_if_passing: bool) -> "Result":
+        return Result(name, hide_if_passing, None)
 
     @staticmethod
-    def failed(name: str, error: str) -> "Result":
-        return Result(name, error)
+    def failed(name: str, hide_if_passing: bool, error: str) -> "Result":
+        return Result(name, hide_if_passing, error)
 
     @property
     def is_passed(self) -> bool:
@@ -38,6 +39,8 @@ class Report(NamedTuple):
 def print_report(report: Report) -> None:
     header("Summary follows")
     for result in report.results:
+        if result.is_passed and result.hide_if_passing:
+            continue
         if result.is_passed:
             prefix = f"[{Fore.GREEN}PASS{Style.RESET_ALL}]"
         else:

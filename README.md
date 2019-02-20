@@ -21,3 +21,14 @@ $ pip install -r requirements.txt
 ### and now actually run it!
 $ python main.py brave-karaf 0.1.2 --gpg-key BB67A050 --git-hash 3cf4ac6577eb0d4775d20f24814e7a0852fa1635
 ```
+
+## Hacking
+
+Install linter, type-checker, and code formatter; run them before committing:
+
+```bash
+$ cd src
+$ . venv/bin/activate
+$ pip install -r requirements-dev.txt
+$ make
+```
