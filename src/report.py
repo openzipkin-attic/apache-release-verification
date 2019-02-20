@@ -48,10 +48,3 @@ def print_report(report: Report) -> None:
         logging.info(f"{prefix} {result.name}")
         if not result.is_passed:
             logging.info(result.error)
-
-    if report.problem_count == 0:
-        logging.info(f"{Fore.GREEN}Everything seems to be in order.{Style.RESET_ALL}")
-    else:
-        logging.info(
-            f"{Fore.RED}Found {report.problem_count} " f"problems.{Style.RESET_ALL}"
-        )

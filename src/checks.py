@@ -169,8 +169,8 @@ def check_sha512(state: State) -> Optional[str]:
 @check("Provided GPG key is in KEYS file")
 def check_gpg_key_in_keys_file(state: State) -> Optional[str]:
     return _check_sh(
-        "gpg --with-colons --import-options show-only "
-        f"--import {state.keys_path} "
+        "gpg --with-colons --import-options import-show "
+        f"--dry-run --import {state.keys_path} "
         "| grep '^pub:' | cut -f5 -d: "
         f"| grep '{state.gpg_key}$'"
     )
@@ -386,5 +386,4 @@ checks = [
     check_license_is_apache_2,
     check_license_looks_good,
     check_no_binary_files,
-    check_build_and_test,
 ]

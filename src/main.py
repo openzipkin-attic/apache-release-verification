@@ -75,6 +75,12 @@ def main(
     # TODO filter checks here with optional arguments later
     report = run_checks(state, checks=checks)
     print_report(report)
+    if report.problem_count == 0:
+        logging.info(f"{Fore.GREEN}Everything seems to be in order.{Style.RESET_ALL}")
+    else:
+        raise click.ClickException(
+            f"{Fore.RED}Found {report.problem_count} " f"problems.{Style.RESET_ALL}"
+        )
 
 
 def configure_logging(verbose: bool) -> None:
