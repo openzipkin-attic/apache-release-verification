@@ -3,11 +3,16 @@
 set -euo pipefail
 
 NO_CLEANUP=${NO_CLEANUP:-}
+BUILD_IMAGE=${BUILD_IMAGE:-}
 
-tag='zipkin-asf-release-verification'
-echo "# Updating environment"
-
-docker build . -t "$tag"
+echo '# Updating environment'
+if [ -z "$BUILD_IMAGE" ]; then
+    tag='abesto/openzipkin-contrib-apache-release-verification'
+    docker pull "$tag"
+else
+    tag='local-openzipkin-contrib-apache-release-verification'
+    docker build . -t "$tag"
+fi
 
 echo "# Executing checks"
 
