@@ -26,6 +26,7 @@ USER_AGENT = "gh:openzipkin-contrib/apache-release-verification"
     "--git-hash", required=True, help="Git hash of the commit the release is built from"
 )
 @click.option("--project", default="zipkin")
+@click.option("--repo", default="dev", help="dev, release, or test")
 @click.option(
     "--incubating/--not-incubating",
     is_flag=True,
@@ -41,6 +42,7 @@ def main(
     git_hash: str,
     gpg_key: str,
     project: str,
+    repo: str,
     incubating: bool,
     verbose: bool,
 ) -> None:
@@ -56,7 +58,7 @@ def main(
     workdir = make_and_enter_workdir()
     logging.info(f"Working directory: {workdir}")
 
-    base_url = generate_base_url(project, incubating)
+    base_url = generate_base_url(repo, project, incubating)
     logging.debug(f"Base URL: {base_url}")
 
     fetch_project(base_url, module, version, incubating)
@@ -72,7 +74,7 @@ def main(
         git_hash=git_hash,
     )
 
-    # TODO filter checks here with optional arguments later
+    # TODO this is the place to filter checks here with optional arguments
     report = run_checks(state, checks=checks)
     print_report(report)
     if report.problem_count == 0:
@@ -97,8 +99,8 @@ def make_and_enter_workdir() -> str:
     return workdir
 
 
-def generate_base_url(project: str, incubating: bool) -> str:
-    url = "https://dist.apache.org/repos/dist/dev/"
+def generate_base_url(repo: str, project: str, incubating: bool) -> str:
+    url = f"https://dist.apache.org/repos/dist/{repo}/"
     if incubating:
         url += "incubator/"
     url += project

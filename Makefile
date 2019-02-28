@@ -15,10 +15,10 @@ venv:
 	[ -e ./venv/bin/pip-sync ] || ./venv/bin/pip install pip-tools
 	./venv/bin/pip-sync requirements.txt requirements-dev.txt
 
-.DEFAULT_GOAL := setup-dev
 .PHONY: setup-dev
 setup-dev: venv ${PRECOMMIT_DST}
 
+.DEFAULT_GOAL := lint
 .PHONY: lint
 lint: setup-dev
 	black src/*.py

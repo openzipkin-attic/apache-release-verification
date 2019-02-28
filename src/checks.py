@@ -136,7 +136,8 @@ def _check_sh(
             if workdir is not None:
                 msg += f" in {workdir}"
             msg += f" exited with non-zero status code {status}. "
-            msg += "See above for output."
+            msg += "See above for output. (Note that the command was run under "
+            msg += "`set -euo pipefail`)"
             return msg
     return None
 
@@ -312,10 +313,34 @@ def check_git_revision(state: State) -> Optional[str]:
 def check_blacklisted_files(state: State) -> Optional[str]:
     blacklist = [".git", ".gitignore", ".mvn", "mvnw", "mvnw.cmd", "Jenkinsfile"]
     commands = [
-        f"test $(find {state.source_dir} -name {item} | wc -l) -eq 0"
+        f"find {state.source_dir} -name {item} | ifne bash -c 'cat && false'"
         for item in blacklist
     ]
     return _check_sh(commands)
+
+
+@check("No .gitignore-d files in git checkout", hide_if_passing=True)
+def check_gitignore_in_repo(state: State) -> Optional[str]:
+    return _check_sh("shopt -s globstar; ! git check-ignore **", workdir=state.git_dir)
+
+
+@check("No .gitignore-d files in source archive", hide_if_passing=False)
+def check_gitignore_in_release(state: State) -> Optional[str]:
+    error = _check_sh(
+        f"find . -name .gitignore | xargs cp --parents -t {state.source_dir}",
+        workdir=state.git_dir,
+    )
+    if not error:
+        error = _check_sh(
+            [
+                "git init --quiet && git add .",
+                "shopt -s globstar; ! git check-ignore **",
+            ],
+            workdir=state.source_dir,
+        )
+    sh(f"rm -rf {state.source_dir}/.git")
+    sh(f"find {state.source_dir} -name .gitignore -delete")
+    return error
 
 
 def _check_file_looks_good(path: str) -> Optional[str]:
@@ -359,7 +384,7 @@ def check_no_binary_files(state: State) -> Optional[str]:
     )
 
 
-@check("Source release builds cleanly")
+@check("Source archive builds cleanly")
 def check_build_and_test(state: State) -> Optional[str]:
     return _check_sh(
         [
@@ -382,6 +407,8 @@ checks = [
     check_base_dir_in_zip,
     check_git_revision,
     check_blacklisted_files,
+    check_gitignore_in_repo,
+    check_gitignore_in_release,
     check_disclaimer_and_notice_look_good,
     check_license_is_apache_2,
     check_license_looks_good,

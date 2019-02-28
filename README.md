@@ -68,6 +68,7 @@ A best-effort list of system dependencies (the script will fail when it hits a m
 * sha256sum
 * git
 * maven
+* ifne (look for a package called `moreutils`)
 
 To run locally:
 

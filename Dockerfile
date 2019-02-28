@@ -5,6 +5,7 @@ RUN apt-get update \
   git \
   less \
   maven \
+  moreutils \
   wget
 
 ENV JAVA_HOME /usr/lib/jvm/default-java/
