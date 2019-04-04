@@ -1,6 +1,7 @@
 import logging
 import os
 import tempfile
+from typing import Optional
 
 import click
 import colorama
@@ -19,13 +20,13 @@ USER_AGENT = "gh:openzipkin-contrib/apache-release-verification"
 
 
 @click.command()
-@click.argument("module")
-@click.argument("version")
+@click.option("--project", default="zipkin")
+@click.option("--module", required=False)
+@click.option("--version", required=True)
 @click.option("--gpg-key", required=True, help="ID of GPG key used to sign the release")
 @click.option(
     "--git-hash", required=True, help="Git hash of the commit the release is built from"
 )
-@click.option("--project", default="zipkin")
 @click.option("--repo", default="dev", help="dev, release, or test")
 @click.option(
     "--incubating/--not-incubating",
@@ -35,24 +36,45 @@ USER_AGENT = "gh:openzipkin-contrib/apache-release-verification"
     "not in incubation. Currently the default is to assume incubation, as "
     "this script is aimed at Zipkin first, which is currently incubating.",
 )
+@click.option(
+    "--zipname-template",
+    default="apache-{project}{dash_module}{dash_incubating}-{version}-source-release",
+    help="Specify the format of the expected .zip filename. Supports the same "
+    "placeholders as --sourcedir-template.",
+)
+@click.option(
+    "--sourcedir-template",
+    default="{module_or_project}-{version}",
+    help="Specify the format of the expected top-level directory in the source "
+    "archive. Usable placeholders: module, project, dash_incubating, "
+    "version",
+)
 @click.option("-v", "--verbose", is_flag=True)
 def main(
-    module: str,
+    project: str,
+    module: Optional[str],
     version: str,
     git_hash: str,
     gpg_key: str,
-    project: str,
     repo: str,
     incubating: bool,
+    zipname_template: str,
+    sourcedir_template: str,
     verbose: bool,
 ) -> None:
     configure_logging(verbose)
     logging.debug(
         f"Arguments: project={project} module={module} version={version} "
         f"incubating={incubating} verbose={verbose} "
+        f"zipname_template={zipname_template} sourcedir_template={sourcedir_template} "
         f"gpg_key={gpg_key} git_hash={git_hash}"
     )
-    header("Verifying release candidate for " f"{project}/{module} {version}")
+
+    header_msg = f"Verifying release candidate for {project}"
+    if module:
+        header_msg += f"/{module}"
+    header_msg += f" {version}"
+    header(header_msg)
     logging.info(f"{Fore.YELLOW}{DISCLAIMER}{Style.RESET_ALL}")
 
     workdir = make_and_enter_workdir()
@@ -70,6 +92,8 @@ def main(
         version=version,
         work_dir=workdir,
         incubating=incubating,
+        zipname_template=zipname_template,
+        sourcedir_template=sourcedir_template,
         gpg_key=gpg_key,
         git_hash=git_hash,
     )
@@ -107,10 +131,19 @@ def generate_base_url(repo: str, project: str, incubating: bool) -> str:
     return url
 
 
-def fetch_project(base_url: str, module: str, version: str, incubating: bool) -> None:
+def fetch_project(
+    base_url: str, module: Optional[str], version: str, incubating: bool
+) -> None:
     step("Downloading release")
-    version_root = f"{base_url}/{module}/{version}"
+
+    version_root = f"{base_url}/"
+    if module:
+        version_root += f"{module}/"
+    version_root += version
+
     cut_dirs = 3
+    if module:
+        cut_dirs += 1
     if incubating:
         cut_dirs += 1
     sh(

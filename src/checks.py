@@ -2,7 +2,7 @@ import filecmp
 import functools
 import logging
 import os
-from typing import Callable, List, Optional, Union
+from typing import Callable, Dict, List, Optional, Union
 
 import apache_2_license
 from helpers import sh, step
@@ -13,10 +13,12 @@ class State:
     def __init__(
         self,
         project: str,
-        module: str,
+        module: Optional[str],
         version: str,
         work_dir: str,
         incubating: bool,
+        zipname_template: str,
+        sourcedir_template: str,
         gpg_key: str,
         git_hash: str,
     ):
@@ -25,19 +27,28 @@ class State:
         self.version = version
         self.work_dir = work_dir
         self.incubating = incubating
+        self.zipname_template = zipname_template
+        self.sourcedir_template = sourcedir_template
         self.gpg_key = gpg_key
         self.git_hash = git_hash
 
     @property
+    def _pattern_placeholders(self) -> Dict[str, str]:
+        return {
+            "project": self.project,
+            "dash_module": f"-{self.module}" if self.module else "",
+            "module_or_project": self.module or self.project,
+            "dash_incubating": "-incubating" if self.incubating else "",
+            "version": self.version,
+        }
+
+    @property
     def release_dir(self) -> str:
-        return os.path.join(self.work_dir, self.project, self.module, self.version)
+        return os.path.join(self.work_dir, self.module or self.project, self.version)
 
     @property
     def base_path(self) -> str:
-        filename = f"apache-{self.project}-{self.module}-"
-        if self.incubating:
-            filename += "incubating-"
-        filename += f"{self.version}-source-release"
+        filename = self.zipname_template.format(**self._pattern_placeholders)
         return os.path.join(self.release_dir, filename)
 
     @property
@@ -62,11 +73,16 @@ class State:
 
     @property
     def source_dir(self) -> str:
-        return os.path.join(self.unzipped_dir, f"{self.module}-{self.version}")
+        dirname = self.sourcedir_template.format(**self._pattern_placeholders)
+        return os.path.join(self.unzipped_dir, dirname)
 
     @property
     def git_repo_name(self) -> str:
-        repo_name = f"{self.project}-{self.module}.git"
+        repo_name = self.project
+        if self.module:
+            repo_name += f"-{self.module}"
+        repo_name += ".git"
+
         if self.incubating:
             repo_name = f"incubator-{repo_name}"
         return repo_name
@@ -115,11 +131,14 @@ def run_checks(state: State, checks: List[Check]) -> Report:
     results = []
     for check in checks:
         step(f"Running check: {check.name}")
-        error = check(state)
-        if error is None:
-            result = Result.passed(check.name, check.hide_if_passing)
-        else:
-            result = Result.failed(check.name, check.hide_if_passing, error)
+        try:
+            error = check(state)
+            if error is None:
+                result = Result.passed(check.name, check.hide_if_passing)
+            else:
+                result = Result.failed(check.name, check.hide_if_passing, error)
+        except Exception as ex:
+            result = Result.failed(check.name, check.hide_if_passing, str(ex))
         results.append(result)
     return Report(results)
 
@@ -215,7 +234,7 @@ def check_unzip(state: State) -> Optional[str]:
 
 
 @check("Base dir in archive is named {module}-{version}")
-def check_base_dir_in_zip(state: State) -> Optional[str]:
+def check_source_dir_in_zip(state: State) -> Optional[str]:
     return _check_sh(f"test -d {state.source_dir}")
 
 
@@ -404,7 +423,7 @@ checks = [
     check_gpg_key_in_keys_file,
     check_gpg_signature,
     check_unzip,
-    check_base_dir_in_zip,
+    check_source_dir_in_zip,
     check_git_revision,
     check_blacklisted_files,
     check_gitignore_in_repo,
