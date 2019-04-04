@@ -18,21 +18,21 @@ This requires Docker to be installed on your machine, but nothing else.
 ```bash
 git clone https://github.com/openzipkin-contrib/apache-release-verification.git
 cd apache-release-verification
-./check.sh brave-karaf 0.1.2 --gpg-key BB67A050 --git-hash 3cf4ac6577eb0d4775d20f24814e7a0852fa1635
+./check.sh --module brave-karaf --version 0.1.2 --gpg-key BB67A050 --git-hash 3cf4ac6577eb0d4775d20f24814e7a0852fa1635
 ```
 
 This uses the Docker image built on Docker Hub. To build the image locally instead, set the `BUILD_IMAGE=1` env variable:
 
 ```bash
 env BUILD_IMAGE=1 ./check.sh \
-  brave-karaf 0.1.2 --gpg-key BB67A050 --git-hash 3cf4ac6577eb0d4775d20f24814e7a0852fa1635
+  --module brave-karaf --version 0.1.2 --gpg-key BB67A050 --git-hash 3cf4ac6577eb0d4775d20f24814e7a0852fa1635
 ```
 
 If you want to do further manual verification after the script is done, even if all check passed, set the `NO_CLEANUP=1` env variable, like so:
 
 ```bash
 env NO_CLEANUP=1 ./check.sh \
-  brave-karaf 0.1.2 --gpg-key BB67A050 --git-hash 3cf4ac6577eb0d4775d20f24814e7a0852fa1635
+  --module brave-karaf --version 0.1.2 --gpg-key BB67A050 --git-hash 3cf4ac6577eb0d4775d20f24814e7a0852fa1635
 ```
 
 At the end of the run, the script will output commands you can use to enter a Docker container with all the results of automated verification, and do your manual work.
@@ -42,7 +42,7 @@ At the end of the run, the script will output commands you can use to enter a Do
 If you really don't want to run `git`, you can get around it like this:
 
 ```
-bash -c '. <(curl -sSL https://raw.githubusercontent.com/openzipkin-contrib/apache-release-verification/master/check.sh) brave-karaf 0.1.2 --gpg-key BB67A050 --git-hash 3cf4ac6577eb0d4775d20f24814e7a0852fa1635'
+bash -c '. <(curl -sSL https://raw.githubusercontent.com/openzipkin-contrib/apache-release-verification/master/check.sh) --module brave-karaf --version 0.1.2 --gpg-key BB67A050 --git-hash 3cf4ac6577eb0d4775d20f24814e7a0852fa1635'
 ```
 
 (In case you're wondering: this is not a standard `curl|sh` setup because the script is interactive, so it needs STDIN to be your interactive terminal)
@@ -54,7 +54,7 @@ You lose the convenience functions provided by `check.sh`, but in exchange you g
 ```
 docker run --rm -ti \
   abesto/openzipkin-contrib-apache-release-verification \
-  brave-karaf 0.1.2 --gpg-key BB67A050 --git-hash 3cf4ac6577eb0d4775d20f24814e7a0852fa1635
+  --module brave-karaf --version 0.1.2 --gpg-key BB67A050 --git-hash 3cf4ac6577eb0d4775d20f24814e7a0852fa1635
 ```
 
 ### The hard way
@@ -75,7 +75,7 @@ To run locally:
 ```bash
 make setup-dev
 ./venv/bin/python3 src/main.py \
-  brave-karaf 0.1.2 --gpg-key BB67A050 --git-hash 3cf4ac6577eb0d4775d20f24814e7a0852fa1635
+  --module brave-karaf --version 0.1.2 --gpg-key BB67A050 --git-hash 3cf4ac6577eb0d4775d20f24814e7a0852fa1635
 ```
 
 (Or activate the virtualenv, if you want. Or don't. Up to you, really.)
