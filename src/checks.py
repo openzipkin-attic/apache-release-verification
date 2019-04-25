@@ -2,10 +2,11 @@ import filecmp
 import functools
 import logging
 import os
+import traceback
 from typing import Callable, Dict, List, Optional, Union
 
 import apache_2_license
-from helpers import sh, step
+from helpers import print_error, sh, step
 from report import Report, Result
 
 
@@ -36,11 +37,21 @@ class State:
     def _pattern_placeholders(self) -> Dict[str, str]:
         return {
             "project": self.project,
+            "module": self.module or "",
             "dash_module": f"-{self.module}" if self.module else "",
             "module_or_project": self.module or self.project,
             "dash_incubating": "-incubating" if self.incubating else "",
             "version": self.version,
         }
+
+    def _format_template(self, template: str) -> str:
+        try:
+            return template.format(**self._pattern_placeholders)
+        except KeyError as e:
+            raise Exception(
+                f"Placeholder '{e.args[0]}' is not known. Valid placeholders: "
+                f"{', '.join(self._pattern_placeholders.keys())}"
+            )
 
     @property
     def release_dir(self) -> str:
@@ -48,7 +59,7 @@ class State:
 
     @property
     def base_path(self) -> str:
-        filename = self.zipname_template.format(**self._pattern_placeholders)
+        filename = self._format_template(self.zipname_template)
         return os.path.join(self.release_dir, filename)
 
     @property
@@ -73,7 +84,7 @@ class State:
 
     @property
     def source_dir(self) -> str:
-        dirname = self.sourcedir_template.format(**self._pattern_placeholders)
+        dirname = self._format_template(self.sourcedir_template)
         return os.path.join(self.unzipped_dir, dirname)
 
     @property
@@ -138,7 +149,13 @@ def run_checks(state: State, checks: List[Check]) -> Report:
             else:
                 result = Result.failed(check.name, check.hide_if_passing, error)
         except Exception as ex:
-            result = Result.failed(check.name, check.hide_if_passing, str(ex))
+            result = Result.failed(
+                check.name,
+                check.hide_if_passing,
+                "".join(traceback.format_exception_only(ex.__class__, ex)).strip(),
+            )
+        if not result.is_passed:
+            print_error(str(result.error))
         results.append(result)
     return Report(results)
 
