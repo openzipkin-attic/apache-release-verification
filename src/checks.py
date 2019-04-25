@@ -233,7 +233,7 @@ def check_unzip(state: State) -> Optional[str]:
     return _check_sh(f"unzip -q -d {state.unzipped_dir} {state.zip_path}")
 
 
-@check("Base dir in archive is named {module}-{version}")
+@check("Base dir in archive has expected name")
 def check_source_dir_in_zip(state: State) -> Optional[str]:
     return _check_sh(f"test -d {state.source_dir}")
 
