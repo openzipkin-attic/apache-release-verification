@@ -260,12 +260,14 @@ def _check_dircmp_only_either_allowed(diff: filecmp.dircmp) -> List[str]:
     allowed_left_only = [
         ".git",
         ".gitignore",
+        ".gitattributes",
+        ".travis.yml",
         ".mvn",
         "mvnw",
         "mvnw.cmd",
         "Jenkinsfile",
     ]
-    allowed_right_only: List[str] = []
+    allowed_right_only: List[str] = ["DEPENDENCIES"]
     # Check files only in the git checkout
     for filename in diff.left_only:
         if filename not in allowed_left_only:
