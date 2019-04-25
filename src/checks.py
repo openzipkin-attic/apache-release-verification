@@ -20,6 +20,7 @@ class State:
         incubating: bool,
         zipname_template: str,
         sourcedir_template: str,
+        github_reponame_template: str,
         gpg_key: str,
         git_hash: str,
     ):
@@ -30,19 +31,59 @@ class State:
         self.incubating = incubating
         self.zipname_template = zipname_template
         self.sourcedir_template = sourcedir_template
+        self.github_reponame_template = github_reponame_template
         self.gpg_key = gpg_key
         self.git_hash = git_hash
+
+    def _generate_optional_placeholders(
+        self, key: str, value: str, condition: bool
+    ) -> Dict[str, str]:
+        """
+        Generate placeholders like "dash_module" which will contain "-$MODULE"
+        if there's a module set, otherwise an empty string.
+        """
+        separators = {"dash": "-", "underscore": "_"}
+        retval = {}
+        # Separator in front
+        retval.update(
+            {
+                f"{sep_name}_{key}": f"{sep_val}{value}" if condition else ""
+                for sep_name, sep_val in separators.items()
+            }
+        )
+        # Separator in the back
+        retval.update(
+            {
+                f"{key}_{sep_name}": f"{value}{sep_val}" if condition else ""
+                for sep_name, sep_val in separators.items()
+            }
+        )
+        # Aaaand go!
+        return retval
 
     @property
     def _pattern_placeholders(self) -> Dict[str, str]:
         return {
             "project": self.project,
             "module": self.module or "",
-            "dash_module": f"-{self.module}" if self.module else "",
             "module_or_project": self.module or self.project,
-            "dash_incubating": "-incubating" if self.incubating else "",
             "version": self.version,
+            **self._generate_optional_placeholders(
+                "module", str(self.module), self.module is not None
+            ),
+            **self._generate_optional_placeholders(
+                "incubating", "incubating", self.incubating
+            ),
+            **self._generate_optional_placeholders(
+                "incubator", "incubator", self.incubating
+            ),
         }
+
+    @classmethod
+    def list_placeholder_keys(cls) -> List[str]:
+        # There's probably a better way to do this, but it'll do for now
+        instance = cls("", "", "", "", False, "", "", "", "", "")
+        return list(instance._pattern_placeholders.keys())
 
     def _format_template(self, template: str) -> str:
         try:
@@ -89,14 +130,7 @@ class State:
 
     @property
     def git_repo_name(self) -> str:
-        repo_name = self.project
-        if self.module:
-            repo_name += f"-{self.module}"
-        repo_name += ".git"
-
-        if self.incubating:
-            repo_name = f"incubator-{repo_name}"
-        return repo_name
+        return self._format_template(self.github_reponame_template)
 
     @property
     def git_dir(self) -> str:
@@ -343,7 +377,7 @@ def check_git_revision(state: State) -> Optional[str]:
 
     if errors:
         errors.append("See above for a full output of diff.")
-        return "\n\n".join(errors)
+        return "\n".join(errors)
     return None
 
 

@@ -46,8 +46,14 @@ USER_AGENT = "gh:openzipkin-contrib/apache-release-verification"
     "--sourcedir-template",
     default="{module_or_project}-{version}",
     help="Specify the format of the expected top-level directory in the source "
-    "archive. Usable placeholders: module, project, dash_incubating, "
-    "version",
+    "archive. Usable placeholders: "
+    f"{', '.join(State.list_placeholder_keys())}",
+)
+@click.option(
+    "--github-reponame-template",
+    default="{incubator_dash}{project}{dash_module}.git",
+    help="Specify the format for the name of the GitHub repository of the project."
+    "Supports the same placeholders as --sourcedir-template.",
 )
 @click.option("-v", "--verbose", is_flag=True)
 def main(
@@ -60,6 +66,7 @@ def main(
     incubating: bool,
     zipname_template: str,
     sourcedir_template: str,
+    github_reponame_template: str,
     verbose: bool,
 ) -> None:
     configure_logging(verbose)
@@ -67,6 +74,7 @@ def main(
         f"Arguments: project={project} module={module} version={version} "
         f"incubating={incubating} verbose={verbose} "
         f"zipname_template={zipname_template} sourcedir_template={sourcedir_template} "
+        f"github_reponame_template={github_reponame_template} "
         f"gpg_key={gpg_key} git_hash={git_hash}"
     )
 
@@ -94,6 +102,7 @@ def main(
         incubating=incubating,
         zipname_template=zipname_template,
         sourcedir_template=sourcedir_template,
+        github_reponame_template=github_reponame_template,
         gpg_key=gpg_key,
         git_hash=git_hash,
     )
