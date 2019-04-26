@@ -27,5 +27,5 @@ def sh(cmd: str, workdir: Optional[str] = None) -> int:
         msg += f" in '{workdir}'"
     substep(msg)
     return subprocess.call(
-        f"set -euo pipefail; {cmd}", shell=True, cwd=workdir, executable="/bin/bash"
+        f"set -euo pipefail; {cmd}", shell=True, cwd=workdir, executable="bash"
     )
