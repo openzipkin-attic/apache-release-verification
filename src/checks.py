@@ -4,6 +4,7 @@ import logging
 import os
 import traceback
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Union
 
 import apache_2_license
@@ -11,32 +12,19 @@ from helpers import print_error, sh, step
 from report import Report, Result
 
 
+@dataclass
 class State:
-    def __init__(
-        self,
-        project: str,
-        module: Optional[str],
-        version: str,
-        work_dir: str,
-        incubating: bool,
-        zipname_template: str,
-        sourcedir_template: str,
-        github_reponame_template: str,
-        gpg_key: str,
-        git_hash: str,
-        build_and_test_command: Optional[str],
-    ):
-        self.project = project
-        self.module = module
-        self.version = version
-        self.work_dir = work_dir
-        self.incubating = incubating
-        self.zipname_template = zipname_template
-        self.sourcedir_template = sourcedir_template
-        self.github_reponame_template = github_reponame_template
-        self.gpg_key = gpg_key
-        self.git_hash = git_hash
-        self.build_and_test_command = build_and_test_command
+    project: str
+    module: Optional[str]
+    version: str
+    work_dir: str
+    incubating: bool
+    zipname_template: str
+    sourcedir_template: str
+    github_reponame_template: str
+    gpg_key: str
+    git_hash: str
+    build_and_test_command: Optional[str]
 
     def _generate_optional_placeholders(
         self, key: str, value: str, condition: bool
