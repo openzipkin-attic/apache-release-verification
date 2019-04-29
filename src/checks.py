@@ -501,13 +501,24 @@ def check_build_and_test(state: State) -> Optional[str]:
 
     strategies = [BuildAndTestMaven(), BuildAndTestNpm()]
     errors: List[str] = []
+    executed_at_least_one = False
 
     for strategy in strategies:
         if not strategy.should_run(state):
             continue
+        executed_at_least_one = True
+        print(f"Executing build-and-test for {strategy.name()}")
         err = strategy.run(state)
         if err is not None:
             errors += f"{strategy.name()}: {err}"
+
+    if not executed_at_least_one:
+        errors = [
+            "Heuristics failed to figure out the way to build and test this release.",
+            "Please specify the build-and-test command as:",
+            "--build-and-test-command 'shell script'",
+            "(Possibly --build-and-test-command true)",
+        ]
 
     if errors:
         return "\n".join(errors)
