@@ -3,6 +3,7 @@ import functools
 import logging
 import os
 import traceback
+from abc import ABC, abstractmethod
 from typing import Callable, Dict, List, Optional, Union
 
 import apache_2_license
@@ -23,6 +24,7 @@ class State:
         github_reponame_template: str,
         gpg_key: str,
         git_hash: str,
+        build_and_test_command: Optional[str],
     ):
         self.project = project
         self.module = module
@@ -34,6 +36,7 @@ class State:
         self.github_reponame_template = github_reponame_template
         self.gpg_key = gpg_key
         self.git_hash = git_hash
+        self.build_and_test_command = build_and_test_command
 
     def _generate_optional_placeholders(
         self, key: str, value: str, condition: bool
@@ -82,7 +85,7 @@ class State:
     @classmethod
     def list_placeholder_keys(cls) -> List[str]:
         # There's probably a better way to do this, but it'll do for now
-        instance = cls("", "", "", "", False, "", "", "", "", "")
+        instance = cls("", "", "", "", False, "", "", "", "", "", None)
         return list(instance._pattern_placeholders.keys())
 
     def _format_template(self, template: str) -> str:
@@ -458,15 +461,69 @@ def check_no_binary_files(state: State) -> Optional[str]:
     )
 
 
+# build / test heuristics start here
+
+
+class BuildAndTest(ABC):
+    @abstractmethod
+    def name(self) -> str:
+        pass
+
+    @abstractmethod
+    def should_run(self, state: State) -> bool:
+        pass
+
+    @abstractmethod
+    def run(self, state: State) -> Optional[str]:
+        pass
+
+
+class BuildAndTestMaven(BuildAndTest):
+    def name(self) -> str:
+        return "maven"
+
+    def should_run(self, state: State) -> bool:
+        return os.path.exists(os.path.join(state.source_dir, "pom.xml"))
+
+    def run(self, state: State) -> Optional[str]:
+        return _check_sh(
+            [
+                "mvn --quiet -N io.takari:maven:wrapper -Dmaven=3.6.0",
+                "./mvnw --quiet package",
+            ],
+            workdir=state.source_dir,
+        )
+
+
+class BuildAndTestNpm(BuildAndTest):
+    def name(self) -> str:
+        return "npm"
+
+    def should_run(self, state: State) -> bool:
+        return os.path.exists(os.path.join(state.source_dir, "package.json"))
+
+    def run(self, state: State) -> Optional[str]:
+        return _check_sh("npm test", workdir=state.source_dir)
+
+
 @check("Source archive builds cleanly")
 def check_build_and_test(state: State) -> Optional[str]:
-    return _check_sh(
-        [
-            "mvn --quiet -N io.takari:maven:wrapper -Dmaven=3.6.0",
-            "./mvnw --quiet package",
-        ],
-        workdir=state.source_dir,
-    )
+    if state.build_and_test_command is not None:
+        return _check_sh(state.build_and_test_command, workdir=state.source_dir)
+
+    strategies = [BuildAndTestMaven(), BuildAndTestNpm()]
+    errors: List[str] = []
+
+    for strategy in strategies:
+        if not strategy.should_run(state):
+            continue
+        err = strategy.run(state)
+        if err is not None:
+            errors += f"{strategy.name()}: {err}"
+
+    if errors:
+        return "\n".join(errors)
+    return None
 
 
 checks = [

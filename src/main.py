@@ -21,7 +21,7 @@ USER_AGENT = "gh:openzipkin-contrib/apache-release-verification"
 
 @click.command()
 @click.option("--project", default="zipkin")
-@click.option("--module", required=False)
+@click.option("--module")
 @click.option("--version", required=True)
 @click.option("--gpg-key", required=True, help="ID of GPG key used to sign the release")
 @click.option(
@@ -55,6 +55,12 @@ USER_AGENT = "gh:openzipkin-contrib/apache-release-verification"
     help="Specify the format for the name of the GitHub repository of the project."
     "Supports the same placeholders as --sourcedir-template.",
 )
+@click.option(
+    "--build-and-test-command",
+    help="Instead of built-in heuristics, use this command to build and "
+    "test the release. Executed with the exctracted source release archive "
+    "as the working directory.",
+)
 @click.option("-v", "--verbose", is_flag=True)
 def main(
     project: str,
@@ -67,6 +73,7 @@ def main(
     zipname_template: str,
     sourcedir_template: str,
     github_reponame_template: str,
+    build_and_test_command: Optional[str],
     verbose: bool,
 ) -> None:
     configure_logging(verbose)
@@ -75,6 +82,7 @@ def main(
         f"incubating={incubating} verbose={verbose} "
         f"zipname_template={zipname_template} sourcedir_template={sourcedir_template} "
         f"github_reponame_template={github_reponame_template} "
+        f"build_and_test_command={build_and_test_command} "
         f"gpg_key={gpg_key} git_hash={git_hash}"
     )
 
@@ -105,6 +113,7 @@ def main(
         github_reponame_template=github_reponame_template,
         gpg_key=gpg_key,
         git_hash=git_hash,
+        build_and_test_command=build_and_test_command,
     )
 
     # TODO this is the place to filter checks here with optional arguments
