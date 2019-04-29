@@ -487,4 +487,5 @@ checks = [
     check_license_is_apache_2,
     check_license_looks_good,
     check_no_binary_files,
+    check_build_and_test,
 ]
