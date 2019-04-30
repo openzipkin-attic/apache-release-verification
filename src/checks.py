@@ -513,12 +513,13 @@ def check_build_and_test(state: State) -> Optional[str]:
             errors += f"{strategy.name()}: {err}"
 
     if not executed_at_least_one:
-        errors = [
-            "Heuristics failed to figure out the way to build and test this release.",
-            "Please specify the build-and-test command as:",
-            "--build-and-test-command 'shell script'",
-            "(Possibly --build-and-test-command true)",
-        ]
+        print(
+            "[NOTICE] This source release does not seem to include a build or test \n"
+            "[NOTICE] command. For common build toolchains, heuristics try to figure\n"
+            "[NOTICE] out what to do, but they failed here. You can optionally\n"
+            "[NOTICE] provide a build-and-test command by re-running with:\n"
+            "[NOTICE] --build-and-test-command 'shell script'"
+        )
 
     if errors:
         return "\n".join(errors)
