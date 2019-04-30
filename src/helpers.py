@@ -17,10 +17,6 @@ def substep(msg: str) -> None:
     logging.info(f"{Fore.CYAN}>> {msg}{Style.RESET_ALL}")
 
 
-def print_error(error: str) -> None:
-    logging.error(f"{Fore.RED}{error}{Style.RESET_ALL}")
-
-
 def sh(cmd: str, workdir: Optional[str] = None) -> int:
     msg = f"Executing `{cmd}`"
     if workdir is not None:

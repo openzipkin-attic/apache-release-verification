@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 import tempfile
 from typing import Optional
 
@@ -122,9 +123,11 @@ def main(
     if report.problem_count == 0:
         logging.info(f"{Fore.GREEN}Everything seems to be in order.{Style.RESET_ALL}")
     else:
-        raise click.ClickException(
-            f"{Fore.RED}Found {report.problem_count} " f"problems.{Style.RESET_ALL}"
+        logging.info(
+            f"{Fore.RED}Found {report.problem_count} "
+            f"potential problems.{Style.RESET_ALL}"
         )
+        sys.exit(1)
 
 
 def configure_logging(verbose: bool) -> None:

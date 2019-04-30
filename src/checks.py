@@ -5,11 +5,11 @@ import os
 import traceback
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Optional, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import apache_2_license
-from helpers import print_error, sh, step
-from report import Report, Result
+from helpers import sh, step
+from report import Report, Result, ResultKind, color_result
 
 
 @dataclass
@@ -128,12 +128,13 @@ class State:
         return os.path.join(self.work_dir, "git", self.git_repo_name)
 
 
+R = Optional[Tuple[str, ResultKind]]
+CheckFun = Callable[[State], R]
+
+
 class Check:
     def __init__(
-        self,
-        fun: Callable[[State], Optional[str]],
-        name: Optional[str] = None,
-        hide_if_passing: bool = False,
+        self, fun: CheckFun, name: Optional[str] = None, hide_if_passing: bool = False
     ):
         self._fun = fun
         self.name = self._generate_nice_name(name, fun)
@@ -148,14 +149,18 @@ class Check:
         name = name.replace("_", " ")
         return name
 
-    def __call__(self, state: State) -> Optional[str]:
-        return self._fun(state)
+    def __call__(self, state: State) -> Result:
+        maybe_problem = self._fun(state)
+        if maybe_problem is None:
+            return Result.passed(self.name, self.hide_if_passing)
+        else:
+            return Result.failed(self.name, self.hide_if_passing, *maybe_problem)
 
 
 def check(
     name: Optional[str] = None, hide_if_passing: bool = False
-) -> Callable[[Callable], Check]:
-    def make_check(fun: Callable) -> Check:
+) -> Callable[[CheckFun], Check]:
+    def make_check(fun: CheckFun) -> Check:
         c = Check(fun, name, hide_if_passing)
         functools.update_wrapper(c, fun)
         return c
@@ -168,26 +173,30 @@ def run_checks(state: State, checks: List[Check]) -> Report:
     for check in checks:
         step(f"Running check: {check.name}")
         try:
-            error = check(state)
-            if error is None:
-                result = Result.passed(check.name, check.hide_if_passing)
-            else:
-                result = Result.failed(check.name, check.hide_if_passing, error)
+            result = check(state)
         except Exception as ex:
             result = Result.failed(
                 check.name,
                 check.hide_if_passing,
                 "".join(traceback.format_exception_only(ex.__class__, ex)).strip(),
+                ResultKind.ERROR,
             )
         if not result.is_passed:
-            print_error(str(result.error))
+            msg = str(result.message)
+            # Inline problem reporting for NOTE level problems
+            # shouldn't be colored
+            if result.kind is not ResultKind.NOTE:
+                msg = color_result(msg, result.kind)
+            print(msg)
         results.append(result)
     return Report(results)
 
 
 def _check_sh(
-    cmds: Union[str, List[str]], workdir: Optional[str] = None
-) -> Optional[str]:
+    cmds: Union[str, List[str]],
+    workdir: Optional[str] = None,
+    failure_level=ResultKind.FAIL,
+) -> R:
     if isinstance(cmds, str):
         cmds = [cmds]
     for cmd in cmds:
@@ -199,37 +208,37 @@ def _check_sh(
             msg += f" exited with non-zero status code {status}. "
             msg += "See above for output. (Note that the command was run under "
             msg += "`set -euo pipefail`)"
-            return msg
+            return msg, failure_level
     return None
 
 
 @check("Source archive has expected name")
-def check_zip_file_exists(state: State) -> Optional[str]:
+def check_zip_file_exists(state: State) -> R:
     return _check_sh(f"test -f {state.zip_path}")
 
 
 @check("SHA512 checksum exists with expected name", hide_if_passing=True)
-def check_sha512_file_exists(state: State) -> Optional[str]:
+def check_sha512_file_exists(state: State) -> R:
     return _check_sh(f"test -f {state.sha512_path}")
 
 
 @check("ASC checksum exists with expected name", hide_if_passing=True)
-def check_asc_file_exists(state: State) -> Optional[str]:
+def check_asc_file_exists(state: State) -> R:
     return _check_sh(f"test -f {state.asc_path}")
 
 
 @check("KEYS file exists", hide_if_passing=True)
-def check_keys_file_exists(state: State) -> Optional[str]:
+def check_keys_file_exists(state: State) -> R:
     return _check_sh(f"test -f {state.keys_path}")
 
 
 @check("SHA512 checksum is correct")
-def check_sha512(state: State) -> Optional[str]:
+def check_sha512(state: State) -> R:
     return _check_sh(f"sha512sum -c {state.sha512_path}", workdir=state.release_dir)
 
 
 @check("Provided GPG key is in KEYS file")
-def check_gpg_key_in_keys_file(state: State) -> Optional[str]:
+def check_gpg_key_in_keys_file(state: State) -> R:
     return _check_sh(
         "gpg --with-colons --import-options import-show "
         f"--dry-run --import {state.keys_path} "
@@ -239,7 +248,7 @@ def check_gpg_key_in_keys_file(state: State) -> Optional[str]:
 
 
 @check("GPG signature is valid, made with the provided key")
-def check_gpg_signature(state: State) -> Optional[str]:
+def check_gpg_signature(state: State) -> R:
     full_keyring = os.path.join(state.work_dir, "gpg.keyring.all")
     strict_keyfile = os.path.join(state.work_dir, "KEYS.strict")
     strict_keyring = os.path.join(state.work_dir, "gpg.keyring.strict")
@@ -271,12 +280,12 @@ def check_gpg_signature(state: State) -> Optional[str]:
 
 
 @check("Source archive can be unzipped", hide_if_passing=True)
-def check_unzip(state: State) -> Optional[str]:
+def check_unzip(state: State) -> R:
     return _check_sh(f"unzip -q -d {state.unzipped_dir} {state.zip_path}")
 
 
 @check("Base dir in archive has expected name")
-def check_source_dir_in_zip(state: State) -> Optional[str]:
+def check_source_dir_in_zip(state: State) -> R:
     return _check_sh(f"test -d {state.source_dir}")
 
 
@@ -336,7 +345,7 @@ def _check_dircmp_no_funny_files(diff: filecmp.dircmp) -> List[str]:
 
 
 @check("Git tree at provided revision matches source archive")
-def check_git_revision(state: State) -> Optional[str]:
+def check_git_revision(state: State) -> R:
     sh_result = _check_sh(
         [
             (
@@ -370,12 +379,12 @@ def check_git_revision(state: State) -> Optional[str]:
 
     if errors:
         errors.append("See above for a full output of diff.")
-        return "\n".join(errors)
+        return "\n".join(errors), ResultKind.WARN
     return None
 
 
 @check("No blacklisted files in the source archive", hide_if_passing=True)
-def check_blacklisted_files(state: State) -> Optional[str]:
+def check_blacklisted_files(state: State) -> R:
     blacklist = [".git", ".gitignore", ".mvn", "mvnw", "mvnw.cmd", "Jenkinsfile"]
     commands = [
         f"find {state.source_dir} -name {item} | ifne bash -c 'cat && false'"
@@ -385,18 +394,18 @@ def check_blacklisted_files(state: State) -> Optional[str]:
 
 
 @check("No .gitignore-d files in git checkout", hide_if_passing=True)
-def check_gitignore_in_repo(state: State) -> Optional[str]:
+def check_gitignore_in_repo(state: State) -> R:
     return _check_sh("shopt -s globstar; ! git check-ignore **", workdir=state.git_dir)
 
 
 @check("No .gitignore-d files in source archive", hide_if_passing=False)
-def check_gitignore_in_release(state: State) -> Optional[str]:
-    error = _check_sh(
+def check_gitignore_in_release(state: State) -> R:
+    result = _check_sh(
         f"find . -name .gitignore | xargs cp --parents -t {state.source_dir}",
         workdir=state.git_dir,
     )
-    if not error:
-        error = _check_sh(
+    if not result:
+        result = _check_sh(
             [
                 "git init --quiet && git add .",
                 "shopt -s globstar; ! git check-ignore **",
@@ -405,10 +414,10 @@ def check_gitignore_in_release(state: State) -> Optional[str]:
         )
     sh(f"rm -rf {state.source_dir}/.git")
     sh(f"find {state.source_dir} -name .gitignore -delete")
-    return error
+    return result
 
 
-def _check_file_looks_good(path: str) -> Optional[str]:
+def _check_file_looks_good(path: str) -> R:
     prompt = f"Did the contents of {path} look good to you? [y/N] "
     return _check_sh(
         [f"less {path}", f"read -r -p '{prompt}' response; test \"$response\" == y"]
@@ -416,19 +425,19 @@ def _check_file_looks_good(path: str) -> Optional[str]:
 
 
 @check("DISCLAIMER and NOTICE look good")
-def check_disclaimer_and_notice_look_good(state: State) -> Optional[str]:
+def check_disclaimer_and_notice_look_good(state: State) -> R:
     errors = []
     for path in ["DISCLAIMER", "NOTICE"]:
         result = _check_file_looks_good(os.path.join(state.source_dir, path))
         if result is not None:
-            errors.append(result)
+            errors.append(result[0])
     if errors:
-        return "\n".join(errors)
+        return "\n".join(errors), ResultKind.FAIL
     return None
 
 
 @check("LICENSE is Apache 2.0", hide_if_passing=True)
-def check_license_is_apache_2(state: State) -> Optional[str]:
+def check_license_is_apache_2(state: State) -> R:
     expected_license_path = os.path.join(state.work_dir, "expected_license")
     actual_license_path = os.path.join(state.source_dir, "LICENSE")
     with open(expected_license_path, "w") as f:
@@ -437,12 +446,12 @@ def check_license_is_apache_2(state: State) -> Optional[str]:
 
 
 @check("LICENSE looks good")
-def check_license_looks_good(state: State) -> Optional[str]:
+def check_license_looks_good(state: State) -> R:
     return _check_file_looks_good(os.path.join(state.source_dir, "LICENSE"))
 
 
 @check("No binary files in the release")
-def check_no_binary_files(state: State) -> Optional[str]:
+def check_no_binary_files(state: State) -> R:
     return _check_sh(
         f"diff <(echo -n) <(find {state.source_dir} -type f "
         "| xargs file | grep -v text | cut -f1 -d:)"
@@ -462,7 +471,7 @@ class BuildAndTest(ABC):
         pass
 
     @abstractmethod
-    def run(self, state: State) -> Optional[str]:
+    def run(self, state: State) -> R:
         pass
 
 
@@ -473,7 +482,7 @@ class BuildAndTestMaven(BuildAndTest):
     def should_run(self, state: State) -> bool:
         return os.path.exists(os.path.join(state.source_dir, "pom.xml"))
 
-    def run(self, state: State) -> Optional[str]:
+    def run(self, state: State) -> R:
         return _check_sh(
             [
                 "mvn --quiet -N io.takari:maven:wrapper -Dmaven=3.6.0",
@@ -490,12 +499,12 @@ class BuildAndTestNpm(BuildAndTest):
     def should_run(self, state: State) -> bool:
         return os.path.exists(os.path.join(state.source_dir, "package.json"))
 
-    def run(self, state: State) -> Optional[str]:
+    def run(self, state: State) -> R:
         return _check_sh("npm test", workdir=state.source_dir)
 
 
 @check("Source archive builds cleanly")
-def check_build_and_test(state: State) -> Optional[str]:
+def check_build_and_test(state: State) -> R:
     if state.build_and_test_command is not None:
         return _check_sh(state.build_and_test_command, workdir=state.source_dir)
 
@@ -513,16 +522,17 @@ def check_build_and_test(state: State) -> Optional[str]:
             errors += f"{strategy.name()}: {err}"
 
     if not executed_at_least_one:
-        print(
-            "[NOTICE] This source release does not seem to include a build or test \n"
-            "[NOTICE] command. For common build toolchains, heuristics try to figure\n"
-            "[NOTICE] out what to do, but they failed here. You can optionally\n"
-            "[NOTICE] provide a build-and-test command by re-running with:\n"
-            "[NOTICE] --build-and-test-command 'shell script'"
+        return (
+            "This source release does not seem to include a build or test \n"
+            "command. For common build toolchains, heuristics try to figure\n"
+            "out what to do, but they failed here. You can optionally\n"
+            "provide a build-and-test command by re-running with:\n"
+            "--build-and-test-command 'shell script'",
+            ResultKind.NOTE,
         )
 
     if errors:
-        return "\n".join(errors)
+        return "\n".join(errors), ResultKind.FAIL
     return None
 
 
