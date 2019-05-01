@@ -294,6 +294,7 @@ def _check_dircmp_only_either_allowed(diff: filecmp.dircmp) -> List[str]:
     allowed_left_only = [
         ".git",
         ".gitignore",
+        ".github",
         ".gitattributes",
         ".travis.yml",
         ".mvn",
