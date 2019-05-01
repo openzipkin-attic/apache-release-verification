@@ -454,7 +454,8 @@ def check_license_looks_good(state: State) -> R:
 def check_no_binary_files(state: State) -> R:
     return _check_sh(
         f"diff <(echo -n) <(find {state.source_dir} -type f "
-        "| xargs file | grep -v text | cut -f1 -d:)"
+        "| xargs file | grep -v text | cut -f1 -d:)",
+        failure_level=ResultKind.NOTE,
     )
 
 
