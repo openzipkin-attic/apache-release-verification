@@ -304,7 +304,7 @@ def _check_dircmp_only_either_allowed(diff: filecmp.dircmp) -> List[str]:
         "CONTRIBUTING",
         "CONTRIBUTING.md",
     ]
-    allowed_right_only: List[str] = ["DEPENDENCIES"]
+    allowed_right_only: List[str] = ["DEPENDENCIES", "dependency-reduced-pom.xml"]
     # Check files only in the git checkout
     for filename in diff.left_only:
         if filename not in allowed_left_only:
