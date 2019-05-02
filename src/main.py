@@ -2,11 +2,12 @@ import logging
 import os
 import sys
 import tempfile
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 import click
 import click_config_file  # type: ignore
 import colorama
+import requests
 import yaml
 from colorama import Fore, Style
 
@@ -23,11 +24,24 @@ of a (P)PMC in part or in full.
 USER_AGENT = "gh:openzipkin-contrib/apache-release-verification"
 
 
+def _load_yaml(x: Any) -> Dict:
+    return {key.replace("-", "_"): value for key, value in yaml.safe_load(x).items()}
+
+
 def yaml_config_provider(path: str, cmd_name: str) -> Dict:
     with open(path) as f:
-        return {
-            key.replace("-", "_"): value for key, value in yaml.safe_load(f).items()
-        }
+        return _load_yaml(f)
+
+
+def remote_config_provider(url: str, cmd_name: str) -> Dict:
+    if not url.startswith("http://") and not url.startswith("https://"):
+        url = (
+            "https://openzipkin-contrib.github.io/apache-release-verification/"
+            f"presets/{url}.yaml"
+        )
+    resp = requests.get(url, headers={"User-Agent": USER_AGENT})
+    resp.raise_for_status()
+    return _load_yaml(resp.content)
 
 
 @click.command()
@@ -73,7 +87,12 @@ def yaml_config_provider(path: str, cmd_name: str) -> Dict:
     "as the working directory.",
 )
 @click.option("-v", "--verbose", is_flag=True)
-@click_config_file.configuration_option(implicit=False, provider=yaml_config_provider)
+@click_config_file.configuration_option(
+    "--config", implicit=False, provider=yaml_config_provider
+)
+@click_config_file.configuration_option(
+    "--remote-config", implicit=False, provider=remote_config_provider
+)
 def main(**kwargs) -> None:
     config = Config(**kwargs)
     configure_logging(config.verbose)
