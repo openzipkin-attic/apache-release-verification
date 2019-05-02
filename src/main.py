@@ -2,13 +2,16 @@ import logging
 import os
 import sys
 import tempfile
-from typing import Optional
+from typing import Dict, Optional
 
 import click
+import click_config_file  # type: ignore
 import colorama
+import yaml
 from colorama import Fore, Style
 
 from checks import State, checks, run_checks
+from config import Config
 from helpers import header, sh, step
 from report import print_report
 
@@ -18,6 +21,13 @@ of verifying a release candidate. It does not take over the responsibilities
 of a (P)PMC in part or in full.
 """.strip()
 USER_AGENT = "gh:openzipkin-contrib/apache-release-verification"
+
+
+def yaml_config_provider(path: str, cmd_name: str) -> Dict:
+    with open(path) as f:
+        return {
+            key.replace("-", "_"): value for key, value in yaml.safe_load(f).items()
+        }
 
 
 @click.command()
@@ -63,59 +73,30 @@ USER_AGENT = "gh:openzipkin-contrib/apache-release-verification"
     "as the working directory.",
 )
 @click.option("-v", "--verbose", is_flag=True)
-def main(
-    project: str,
-    module: Optional[str],
-    version: str,
-    git_hash: str,
-    gpg_key: str,
-    repo: str,
-    incubating: bool,
-    zipname_template: str,
-    sourcedir_template: str,
-    github_reponame_template: str,
-    build_and_test_command: Optional[str],
-    verbose: bool,
-) -> None:
-    configure_logging(verbose)
-    logging.debug(
-        f"Arguments: project={project} module={module} version={version} "
-        f"incubating={incubating} verbose={verbose} "
-        f"zipname_template={zipname_template} sourcedir_template={sourcedir_template} "
-        f"github_reponame_template={github_reponame_template} "
-        f"build_and_test_command={build_and_test_command} "
-        f"gpg_key={gpg_key} git_hash={git_hash}"
-    )
+@click_config_file.configuration_option(implicit=False, provider=yaml_config_provider)
+def main(**kwargs) -> None:
+    config = Config(**kwargs)
+    configure_logging(config.verbose)
 
-    header_msg = f"Verifying release candidate for {project}"
-    if module:
-        header_msg += f"/{module}"
-    header_msg += f" {version}"
+    logging.debug(config)
+
+    header_msg = f"Verifying release candidate for {config.project}"
+    if config.module:
+        header_msg += f"/{config.module}"
+    header_msg += f" {config.version}"
     header(header_msg)
     logging.info(f"{Fore.YELLOW}{DISCLAIMER}{Style.RESET_ALL}")
 
     workdir = make_and_enter_workdir()
     logging.info(f"Working directory: {workdir}")
 
-    base_url = generate_base_url(repo, project, incubating)
+    base_url = generate_base_url(config.repo, config.project, config.incubating)
     logging.debug(f"Base URL: {base_url}")
 
-    fetch_project(base_url, module, version, incubating)
+    fetch_project(base_url, config.module, config.version, config.incubating)
     fetch_keys(base_url)
 
-    state = State(
-        project=project,
-        module=module,
-        version=version,
-        work_dir=workdir,
-        incubating=incubating,
-        zipname_template=zipname_template,
-        sourcedir_template=sourcedir_template,
-        github_reponame_template=github_reponame_template,
-        gpg_key=gpg_key,
-        git_hash=git_hash,
-        build_and_test_command=build_and_test_command,
-    )
+    state = State(work_dir=workdir, **config.__dict__)
 
     # TODO this is the place to filter checks here with optional arguments
     report = run_checks(state, checks=checks)

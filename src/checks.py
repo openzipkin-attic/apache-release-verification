@@ -8,23 +8,14 @@ from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import apache_2_license
+from config import Config
 from helpers import sh, step
 from report import Report, Result, ResultKind, color_result
 
 
 @dataclass
-class State:
-    project: str
-    module: Optional[str]
-    version: str
+class State(Config):
     work_dir: str
-    incubating: bool
-    zipname_template: str
-    sourcedir_template: str
-    github_reponame_template: str
-    gpg_key: str
-    git_hash: str
-    build_and_test_command: Optional[str]
 
     def _generate_optional_placeholders(
         self, key: str, value: str, condition: bool
@@ -73,7 +64,7 @@ class State:
     @classmethod
     def list_placeholder_keys(cls) -> List[str]:
         # There's probably a better way to do this, but it'll do for now
-        instance = cls("", "", "", "", False, "", "", "", "", "", None)
+        instance = cls(*([None] * 13))  # type: ignore
         return list(instance._pattern_placeholders.keys())
 
     def _format_template(self, template: str) -> str:
@@ -170,6 +161,7 @@ def check(
 
 def run_checks(state: State, checks: List[Check]) -> Report:
     results = []
+
     for check in checks:
         step(f"Running check: {check.name}")
         try:
