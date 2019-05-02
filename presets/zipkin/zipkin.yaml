@@ -1,0 +1,4 @@
+project: zipkin
+module: zipkin
+zipname-template: 'apache-{module}{dash_incubating}-{version}-source-release'
+github-reponame-template: '{incubator_dash}{module}.git'
