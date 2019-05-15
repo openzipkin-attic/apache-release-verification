@@ -15,4 +15,3 @@ class Config:
     gpg_key: str
     git_hash: str
     build_and_test_command: Optional[str]
-    verbose: bool

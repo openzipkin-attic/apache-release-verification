@@ -64,7 +64,7 @@ class State(Config):
     @classmethod
     def list_placeholder_keys(cls) -> List[str]:
         # There's probably a better way to do this, but it'll do for now
-        instance = cls(*([None] * 13))  # type: ignore
+        instance = cls(*([None] * 12))  # type: ignore
         return list(instance._pattern_placeholders.keys())
 
     def _format_template(self, template: str) -> str:

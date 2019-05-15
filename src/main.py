@@ -2,10 +2,9 @@ import logging
 import os
 import sys
 import tempfile
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 import click
-import click_config_file  # type: ignore
 import colorama
 import requests
 import yaml
@@ -28,31 +27,123 @@ def _load_yaml(x: Any) -> Dict:
     return {key.replace("-", "_"): value for key, value in yaml.safe_load(x).items()}
 
 
-def yaml_config_provider(path: str, cmd_name: str) -> Dict:
-    with open(path) as f:
-        return _load_yaml(f)
+def local_config_callback(
+    ctx: click.Context,
+    _param: Union[click.Option, click.Parameter],
+    value: Optional[str],
+) -> Optional[str]:
+    if value is None:
+        logging.debug("local_config_callback: value is None, not loading anything")
+        return None
+    with open(value) as f:
+        data = _load_yaml(f)
+    logging.debug(f"local_config_callback: loaded data from {value}: {data}")
+    original = ctx.default_map or {}
+    ctx.default_map = {**original, **data}
+    return value
 
 
-def remote_config_provider(url: str, cmd_name: str) -> Dict:
+def remote_config_provider(is_default: bool, url: str) -> Dict:
     if not url.startswith("http://") and not url.startswith("https://"):
         url = (
             "https://openzipkin-contrib.github.io/apache-release-verification/"
             f"presets/{url}.yaml"
         )
+    logging.debug(f"remote_config_provider: Loading remote config from {url}")
     resp = requests.get(url, headers={"User-Agent": USER_AGENT})
-    resp.raise_for_status()
-    return _load_yaml(resp.content)
+    try:
+        resp.raise_for_status()
+        data = _load_yaml(resp.content)
+        logging.debug(f"remote_config_provider: Loaded data: {data}")
+        return data
+    except requests.exceptions.HTTPError:
+        if is_default:
+            return {}
+        else:
+            raise
 
 
-@click.command()
-@click.option("--project", default="zipkin")
-@click.option("--module")
+def remote_config_callback(
+    ctx: click.Context,
+    _param: Union[click.Option, click.Parameter],
+    value: Optional[str],
+) -> Optional[str]:
+    is_default = False
+    if value is None:
+        is_default = True
+        project = ctx.params["project"]
+        module = ctx.params["module"]
+        if project is not None and module is not None:
+            value = f"{project}/{module}"
+            logging.debug(f"remote_config_callback: inferred URL {value}")
+        else:
+            logging.debug(
+                "remote_config_callback: no value specified, and project or "
+                "module is None, not fetching remote config"
+            )
+    if value is not None:
+        original = ctx.default_map or {}
+        ctx.default_map = {**original, **remote_config_provider(is_default, value)}
+    return value
+
+
+def configure_logging(verbose: bool):
+    if verbose:
+        level = logging.DEBUG
+    else:
+        level = logging.INFO
+    logging.basicConfig(level=level, format="%(message)s")
+
+
+def configure_logging_callback(
+    _ctx: click.Context, _param: Union[click.Option, click.Parameter], verbose: bool
+) -> bool:
+    configure_logging(verbose)
+    return verbose
+
+
+@click.command(context_settings=dict(max_content_width=120))
+@click.option(
+    "-v",
+    "--verbose",
+    is_flag=True,
+    expose_value=False,
+    # We don't actually use this; it's evaluated in the __main__ block.
+    # See comment there for details.
+)
+@click.option("--project", default="zipkin", is_eager=True)
+@click.option("--module", is_eager=True)
+@click.option(
+    "--config",
+    default=None,
+    callback=local_config_callback,
+    expose_value=False,
+    is_eager=True,
+    help="Path to a local .yml file to load options from.",
+)
+@click.option(
+    "--remote-config",
+    default=None,
+    callback=remote_config_callback,
+    expose_value=False,
+    is_eager=True,
+    help="Remote file to load options from. Can be a full HTTP(S) URL, or a "
+    "simple string PROJECT/MODULE, which will be expanded to load from "
+    "the central repository at https://openzipkin-contrib.github.io/"
+    "apache-release-verification/presets/PROJECT/MODULE.yaml. Defaults "
+    "to $PROJECT/$MODULE",
+)
 @click.option("--version", required=True)
 @click.option("--gpg-key", required=True, help="ID of GPG key used to sign the release")
 @click.option(
     "--git-hash", required=True, help="Git hash of the commit the release is built from"
 )
-@click.option("--repo", default="dev", help="dev, release, or test")
+@click.option(
+    "--repo",
+    type=click.Choice(["dev", "release", "test"]),
+    default="dev",
+    help="dev, release, or test",
+)
 @click.option(
     "--incubating/--not-incubating",
     is_flag=True,
@@ -86,18 +177,9 @@ def remote_config_provider(url: str, cmd_name: str) -> Dict:
     "test the release. Executed with the exctracted source release archive "
     "as the working directory.",
 )
-@click.option("-v", "--verbose", is_flag=True)
-@click_config_file.configuration_option(
-    "--config", implicit=False, provider=yaml_config_provider
-)
-@click_config_file.configuration_option(
-    "--remote-config", implicit=False, provider=remote_config_provider
-)
 def main(**kwargs) -> None:
     config = Config(**kwargs)
-    configure_logging(config.verbose)
-
-    logging.debug(config)
+    logging.debug(f"Resolved config: {config}")
 
     header_msg = f"Verifying release candidate for {config.project}"
     if config.module:
@@ -128,14 +210,6 @@ def main(**kwargs) -> None:
             f"potential problems.{Style.RESET_ALL}"
         )
         sys.exit(1)
-
-
-def configure_logging(verbose: bool) -> None:
-    if verbose:
-        level = logging.DEBUG
-    else:
-        level = logging.INFO
-    logging.basicConfig(level=level, format="%(message)s")
 
 
 def make_and_enter_workdir() -> str:
@@ -181,4 +255,15 @@ def fetch_keys(base_url: str) -> None:
 
 if __name__ == "__main__":
     colorama.init()
+
+    # There is only a single level of eagerness in Click, and we use that to
+    # load config options from local or remote files. But we need to handle
+    # --verbose before that happens, so that we can log from the related
+    # functions. So... you know, this is it.
+    if "-v" in sys.argv or "--verbose" in sys.argv:
+        configure_logging(True)
+    else:
+        configure_logging(False)
+
+    # Now we can execute the actual program
     main()
