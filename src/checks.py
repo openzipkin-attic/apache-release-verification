@@ -21,6 +21,7 @@ class State:
     incubating: bool
     zipname_template: str
     sourcedir_template: str
+    github_org: str
     github_reponame_template: str
     gpg_key: str
     git_hash: str
@@ -73,7 +74,7 @@ class State:
     @classmethod
     def list_placeholder_keys(cls) -> List[str]:
         # There's probably a better way to do this, but it'll do for now
-        instance = cls("", "", "", "", False, "", "", "", "", "", None)
+        instance = cls("", "", "", "", False, "", "", "", "", "", "", None)
         return list(instance._pattern_placeholders.keys())
 
     def _format_template(self, template: str) -> str:
@@ -109,6 +110,10 @@ class State:
     @property
     def asc_path(self) -> str:
         return self.zip_path + ".asc"
+
+    @property
+    def asfignore_path(self) -> str:
+        return os.path.join(self.git_dir, ".asfignore")
 
     @property
     def unzipped_dir(self) -> str:
@@ -289,13 +294,16 @@ def check_source_dir_in_zip(state: State) -> R:
     return _check_sh(f"test -d {state.source_dir}")
 
 
-def _check_dircmp_only_either_allowed(diff: filecmp.dircmp) -> List[str]:
+def _check_dircmp_only_either_allowed(
+    asfignore: List[str], diff: filecmp.dircmp
+) -> List[str]:
     errors = []
     allowed_left_only = [
         ".git",
         ".gitignore",
         ".github",
         ".gitattributes",
+        ".asfignore",
         ".travis.yml",
         ".mvn",
         "mvnw",
@@ -307,30 +315,35 @@ def _check_dircmp_only_either_allowed(diff: filecmp.dircmp) -> List[str]:
     allowed_right_only: List[str] = ["DEPENDENCIES", "dependency-reduced-pom.xml"]
     # Check files only in the git checkout
     for filename in diff.left_only:
-        if filename not in allowed_left_only:
+        if filename not in (allowed_left_only + asfignore):
             errors.append(
                 os.path.join(diff.left, filename) + " is only in the git checkout"
             )
     # Check files only in the source archive
     for filename in diff.right_only:
-        if filename not in allowed_right_only:
+        if filename not in (allowed_right_only + asfignore):
             errors.append(
                 os.path.join(diff.right, filename) + " is only in the source archive"
             )
     # And recurse into subdirectories
     for subdiff in diff.subdirs.values():
-        errors += _check_dircmp_only_either_allowed(subdiff)
+        errors += _check_dircmp_only_either_allowed(asfignore, subdiff)
     return errors
 
 
-def _check_dircmp_no_diff_files(diff: filecmp.dircmp) -> List[str]:
+def _check_dircmp_no_diff_files(
+    asfignore: List[str], diff: filecmp.dircmp
+) -> List[str]:
     errors: List[str] = []
-    if diff.diff_files:
-        errors += "The contents of the following files differ: " + " ".join(
-            diff.diff_files
+    bad_diffs = [
+        file for file in diff.diff_files if os.path.basename(file) not in asfignore
+    ]
+    if bad_diffs:
+        errors.append(
+            "The contents of the following files differ: " + " ".join(diff.diff_files)
         )
     for subdiff in diff.subdirs.values():
-        errors += _check_dircmp_no_diff_files(subdiff)
+        errors += _check_dircmp_no_diff_files(asfignore, subdiff)
     return errors
 
 
@@ -341,7 +354,7 @@ def _check_dircmp_no_funny_files(diff: filecmp.dircmp) -> List[str]:
             diff.diff_files
         )
     for subdiff in diff.subdirs.values():
-        errors += _check_dircmp_no_diff_files(subdiff)
+        errors += _check_dircmp_no_funny_files(subdiff)
     return errors
 
 
@@ -350,7 +363,8 @@ def check_git_revision(state: State) -> R:
     sh_result = _check_sh(
         [
             (
-                f"git clone https://github.com/apache/{state.git_repo_name} "
+                "git clone https://github.com/"
+                f"{state.github_org}/{state.git_repo_name} "
                 f"{state.git_dir}"
             ),
             (
@@ -371,10 +385,23 @@ def check_git_revision(state: State) -> R:
     errors: List[str] = []
 
     # First, check that any files appearing in only one tree are allowed
-    errors += _check_dircmp_only_either_allowed(diff)
+    if os.path.exists(state.asfignore_path):
+        with open(state.asfignore_path, "r") as f:
+            asfignore = [line.strip() for line in f.readlines()]
+        logging.debug(
+            "check_git_revision: Read ignored files from "
+            f"{state.asfignore_path}: {asfignore}"
+        )
+    else:
+        logging.debug(
+            "check_git_revision: .asfignore file not found at "
+            f"{state.asfignore_path}, not loading"
+        )
+        asfignore = []
+    errors += _check_dircmp_only_either_allowed(asfignore, diff)
 
     # Then make sure that all files that exist in both places have no diff
-    errors += _check_dircmp_no_diff_files(diff)
+    errors += _check_dircmp_no_diff_files(asfignore, diff)
     # And finally that there we could compare all the files
     errors += _check_dircmp_no_funny_files(diff)
 
@@ -521,7 +548,7 @@ def check_build_and_test(state: State) -> R:
         print(f"Executing build-and-test for {strategy.name()}")
         err = strategy.run(state)
         if err is not None:
-            errors += f"{strategy.name()}: {err}"
+            errors.append(f"{strategy.name()}: {err}")
 
     if not executed_at_least_one:
         return (

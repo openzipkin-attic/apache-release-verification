@@ -50,6 +50,7 @@ USER_AGENT = "gh:openzipkin-contrib/apache-release-verification"
     "archive. Usable placeholders: "
     f"{', '.join(State.list_placeholder_keys())}",
 )
+@click.option("--github-org", default="apache")
 @click.option(
     "--github-reponame-template",
     default="{incubator_dash}{project}{dash_module}.git",
@@ -73,6 +74,7 @@ def main(
     incubating: bool,
     zipname_template: str,
     sourcedir_template: str,
+    github_org: str,
     github_reponame_template: str,
     build_and_test_command: Optional[str],
     verbose: bool,
@@ -82,7 +84,7 @@ def main(
         f"Arguments: project={project} module={module} version={version} "
         f"incubating={incubating} verbose={verbose} "
         f"zipname_template={zipname_template} sourcedir_template={sourcedir_template} "
-        f"github_reponame_template={github_reponame_template} "
+        f"github_org={github_org} github_reponame_template={github_reponame_template} "
         f"build_and_test_command={build_and_test_command} "
         f"gpg_key={gpg_key} git_hash={git_hash}"
     )
@@ -111,6 +113,7 @@ def main(
         incubating=incubating,
         zipname_template=zipname_template,
         sourcedir_template=sourcedir_template,
+        github_org=github_org,
         github_reponame_template=github_reponame_template,
         gpg_key=gpg_key,
         git_hash=git_hash,
