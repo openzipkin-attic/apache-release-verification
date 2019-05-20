@@ -137,10 +137,10 @@ class Check:
         self, fun: CheckFun, name: Optional[str] = None, hide_if_passing: bool = False
     ):
         self._fun = fun
-        self.name = self._generate_nice_name(name, fun)
+        self.name = self._generate_nice_name(name)
         self.hide_if_passing = hide_if_passing
 
-    def _generate_nice_name(self, name: Optional[str], fun: Callable):
+    def _generate_nice_name(self, name: Optional[str]):
         if name is not None:
             return name
         name = self._fun.__name__
@@ -439,11 +439,13 @@ def check_disclaimer_and_notice_look_good(state: State) -> R:
 
 @check("LICENSE is Apache 2.0", hide_if_passing=True)
 def check_license_is_apache_2(state: State) -> R:
-    expected_license_path = os.path.join(state.work_dir, "expected_license")
     actual_license_path = os.path.join(state.source_dir, "LICENSE")
-    with open(expected_license_path, "w") as f:
-        f.write(apache_2_license.text)
-    return _check_sh([f"diff {expected_license_path} {actual_license_path}"])
+    expected_license = apache_2_license.text
+    with open(actual_license_path, "r") as f:
+        actual_license = f.read()
+    if not actual_license.startswith(expected_license):
+        return "LICENSE does not look like an Apache 2.0 license", ResultKind.FAIL
+    return None
 
 
 @check("LICENSE looks good")
@@ -521,7 +523,7 @@ def check_build_and_test(state: State) -> R:
         print(f"Executing build-and-test for {strategy.name()}")
         err = strategy.run(state)
         if err is not None:
-            errors += f"{strategy.name()}: {err}"
+            errors.append(f"{strategy.name()}: {err}")
 
     if not executed_at_least_one:
         return (
