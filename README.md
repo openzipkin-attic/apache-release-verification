@@ -1,3 +1,7 @@
+# Archived
+
+This repository has been archived as Zipkin is no longer in the Apache incubator.
+
 # apache-release-verification
 
 This project aims to automate some Apache Software Foundation source release verification steps. It cannot take over release review responsibilities: as a PMC, you're still directly responsible for verifying the release matches requirements. This script automates some of those steps in as transparent a way as possible.
